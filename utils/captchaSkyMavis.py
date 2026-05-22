@@ -7,7 +7,7 @@ import threading
 import queue
 import os
 from flask import Flask, request, jsonify
-from time import sleep
+import time
 from PIL import Image
 import numpy as np
 import cv2
@@ -20,8 +20,9 @@ except ImportError:
     import base64ToImage
 
 # Configurações principais
-MODEL_POOL_SIZE = 8  # Ajuste este número conforme a capacidade do seu hardware
+MODEL_POOL_SIZE = 3  # Ajuste este número conforme a capacidade do seu hardware
 CACHE_SIZE = 5    # Número de captchas para manter em cache
+CACHE_TIMEOUT = 1200  # Validade de cada captcha no cache em segundos
 
 app = Flask(__name__)
 
@@ -127,7 +128,7 @@ def request_with_proxies(method, url, **kwargs):
         except Exception as e:
             last_error = e
             print(f"[!] Proxy falhou {proxy}: {e}")
-            sleep(1)
+            time.sleep(1)
     
     raise Exception(f"Todas as proxies falharam. Último erro: {last_error}")
 
@@ -174,7 +175,7 @@ def cache_worker(worker_id):
 
         if should_wait:
             print(f"[✓] Thread #{worker_id}: Cache cheio ({cache_size}/{CACHE_SIZE}), aguardando...")
-            sleep(5)
+            time.sleep(5)
             continue
 
         try:
@@ -191,7 +192,8 @@ def cache_worker(worker_id):
                     'id': captcha_id,
                     'angle': angle,
                     'result': result,
-                    'proxy': None
+                    'proxy': None,
+                    'created_at': time.time()
                 })
 
                 with cache_lock:
@@ -203,9 +205,9 @@ def cache_worker(worker_id):
 
         except Exception as e:
             print(f"[!] Thread #{worker_id}: Erro geral: {e}")
-            sleep(2)
+            time.sleep(2)
         
-        sleep(0.5)
+        time.sleep(0.5)
 
 def solve_with_proxies():
     request_thread_id = threading.get_ident()
@@ -252,8 +254,17 @@ jobs = {}
 def submit():
     job_id = str(uuid.uuid4())
     
-    if not captcha_cache.empty():
-        cached_captcha = captcha_cache.get()
+    cached_captcha = None
+    while not captcha_cache.empty():
+        item = captcha_cache.get()
+        age = time.time() - item['created_at']
+        if age < CACHE_TIMEOUT:
+            cached_captcha = item
+            break
+        else:
+            print(f"[!] Captcha expirado descartado: ID {item['id']} (idade: {age:.1f}s)")
+
+    if cached_captcha:
         with cache_lock:
             cache_size = captcha_cache.qsize()
         print(f"[→] Usando captcha do cache ({cache_size}/{CACHE_SIZE} restantes)")
@@ -264,7 +275,7 @@ def submit():
             cached_captcha['proxy']
         )
     else:
-        print(f"[!] Cache vazio, resolvendo captcha sob demanda")
+        print(f"[!] Cache vazio ou expirado, resolvendo captcha sob demanda")
         future = executor.submit(solve_with_proxies)
     
     jobs[job_id] = future
@@ -284,6 +295,37 @@ def result(job_id):
     except Exception as e:
         jobs.pop(job_id, None)
         return jsonify({'status': 'error', 'error': str(e)}), 500
+
+@app.route('/add-captcha', methods=['POST'])
+def add_captcha():
+    data = request.get_json()
+    if not data:
+        return jsonify({'status': 'error', 'error': 'JSON body required'}), 400
+
+    captcha_id = data.get('id')
+    captcha_result = data.get('result')
+
+    if captcha_id is None or captcha_result is None:
+        return jsonify({'status': 'error', 'error': 'Campos "id" e "result" são obrigatórios'}), 400
+
+    with cache_lock:
+        if captcha_cache.full():
+            return jsonify({'status': 'error', 'error': 'Cache cheio'}), 429
+
+    captcha_cache.put({
+        'id': captcha_id,
+        'result': captcha_result,
+        'angle': None,
+        'proxy': None,
+        'created_at': time.time()
+    })
+
+    with cache_lock:
+        cache_size = captcha_cache.qsize()
+
+    print(f"[+] Captcha adicionado via API: ID {captcha_id}, Resultado: {captcha_result} ({cache_size}/{CACHE_SIZE})")
+    return jsonify({'status': 'ok', 'cache_size': cache_size, 'cache_max_size': CACHE_SIZE})
+
 
 @app.route('/cache/status', methods=['GET'])
 def cache_status():
