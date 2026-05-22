@@ -12,7 +12,7 @@ O captcha é uma imagem de um Axie rotacionada aleatoriamente; a orientação co
 
 ![Captcha do Axie](axie.png)
 
-1. **Coleta das imagens** — para conseguir as imagems para treinar o modelo fiz um script simples que faz requisições para `https://x.skymavis.com/captcha-srv/check`, extrai o base64 da resposta, converte para `.png` e salva. Foram coletados aproximadamente **200 captchas**.
+1. **Coleta das imagens** — para conseguir as imagens para treinar o modelo fiz um script simples que faz requisições para `https://x.skymavis.com/captcha-srv/check`, extrai o base64 da resposta, converte para `.png` e salva. Foram coletados aproximadamente **200 captchas**.
 
 2. **Geração das rotações** — cada captcha original é rotacionado 12 vezes (0°, 30°, 60°, ..., 330°), gerando 12 variações por captcha. Apenas uma delas está na orientação correta (imagem direita, sem rotação).
 
