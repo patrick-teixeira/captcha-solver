@@ -8,11 +8,11 @@ Microsserviço que resolve captchas de rotação de imagem da Sky Mavis utilizan
 
 O modelo `best.pt` foi treinado para detectar a orientação correta do captcha. O processo de criação do dataset seguiu estas etapas:
 
-O captcha consiste em uma imagem de um Axie rotacionada aleatoriamente:
+O captcha é uma imagem de um Axie rotacionada aleatoriamente; a orientação correta é quando o Axie está em pé:
 
 ![Captcha do Axie](axie.png)
 
-1. **Coleta das imagens** — um script simples faz requisições para `https://x.skymavis.com/captcha-srv/check`, extrai o base64 da resposta, converte para `.png` e salva. Foram coletados aproximadamente **200 captchas**.
+1. **Coleta das imagens** — para conseguir as imagems para treianr o modelo fiz um script simples que faz requisições para `https://x.skymavis.com/captcha-srv/check`, extrai o base64 da resposta, converte para `.png` e salva. Foram coletados aproximadamente **200 captchas**.
 
 2. **Geração das rotações** — cada captcha original é rotacionado 12 vezes (0°, 30°, 60°, ..., 330°), gerando 12 variações por captcha. Apenas uma delas está na orientação correta (imagem direita, sem rotação).
 
@@ -67,7 +67,7 @@ curl -X POST http://localhost:6000/add-captcha \
 
 ### Proxies
 
-Adicione uma URL de proxy por linha no arquivo `proxies.txt`:
+Caso queira utilizar proxies adicione uma URL de proxy por linha no arquivo `proxies.txt`:
 
 ```
 http://user:pass@proxy1:8080
